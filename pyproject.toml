@@ -20,6 +20,7 @@ dependencies = [
     "ty>=0.0.26",
     "ruff>=0.15.8",
     "pympler>=1.1",
+    "snakeviz>=2.2.2",
 ]
 
 [build-system]
@@ -46,7 +47,15 @@ line-length = 120
 # Also ignore `E402` in all `__init__.py` files.
 "__init__.py" = ["E402", "F401", "F403", "E501"]
 
+[dependency-groups]
+dev = [
+    "py-spy>=0.4.2",
+]
+
 [tool.ruff.lint]
 extend-select = ["UP"]
 ignore = ["F722"]
 
+[[tool.uv.index]]
+url = "https://pypi.tuna.tsinghua.edu.cn/simple"
+default = true

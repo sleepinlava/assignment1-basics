@@ -11,6 +11,7 @@ from torch import Tensor
 
 from cs336_basics import BPETokenizer
 
+
 def run_linear(
     d_in: int,
     d_out: int,
@@ -591,4 +592,6 @@ def run_train_bpe(
                 Merges are ordered by order of creation.
     """
     # raise NotImplementedError
-    return BPETokenizer.bpe_train(input_path, vocab_size, special_tokens)
+    return BPETokenizer.bpe_train(
+        input_path, vocab_size, special_tokens, "/home/bker/cs336_2026/assignment1-basics/table"
+    )
