@@ -6,10 +6,12 @@ from typing import IO, Any, BinaryIO
 
 import numpy.typing as npt
 import torch
+import torchada
 from jaxtyping import Bool, Float, Int
 from torch import Tensor
 
-from cs336_basics import BPETokenizer
+# we use musa
+from cs336_basics import bpe_train, embedding, linear, rmsnorm
 
 
 def run_linear(
@@ -18,6 +20,7 @@ def run_linear(
     weights: Float[Tensor, " d_out d_in"],
     in_features: Float[Tensor, " ... d_in"],
 ) -> Float[Tensor, " ... d_out"]:
+    model = linear.Linear(in_features=d_in, out_features=d_out, device=weights.device, dtype=weights.dtype)
     """
     Given the weights of a Linear layer, compute the transformation of a batched input.
 
@@ -30,8 +33,10 @@ def run_linear(
     Returns:
         Float[Tensor, "... d_out"]: The transformed output of your linear module.
     """
+    model.load_state_dict({"weight": weights})
 
-    raise NotImplementedError
+    # raise NotImplementedError
+    return model.forward(in_features)
 
 
 def run_embedding(
@@ -40,6 +45,8 @@ def run_embedding(
     weights: Float[Tensor, " vocab_size d_model"],
     token_ids: Int[Tensor, " ..."],
 ) -> Float[Tensor, " ... d_model"]:
+    model = embedding.embedding(vocab_size, d_model, device=weights.device, dtype=weights.dtype)
+
     """
     Given the weights of an Embedding layer, get the embeddings for a batch of token ids.
 
@@ -53,7 +60,8 @@ def run_embedding(
         Float[Tensor, "... d_model"]: Batch of embeddings returned by your Embedding layer.
     """
 
-    raise NotImplementedError
+    model.load_state_dict({"weight": weights})
+    return model.forward(token_ids)
 
 
 def run_swiglu(
@@ -366,6 +374,10 @@ def run_rmsnorm(
     weights: Float[Tensor, " d_model"],
     in_features: Float[Tensor, " ... d_model"],
 ) -> Float[Tensor, " ... d_model"]:
+
+    model = rmsnorm.RMSNorm(d_model, eps, device=weights.device, dtype=weights.dtype)
+
+    model.load_state_dict({"weight": weights})
     """Given the weights of a RMSNorm affine transform,
     return the output of running RMSNorm on the input features.
 
@@ -380,7 +392,7 @@ def run_rmsnorm(
         Float[Tensor,"... d_model"]: Tensor of with the same shape as `in_features` with the output of running
         RMSNorm of the `in_features`.
     """
-    raise NotImplementedError
+    return model.forward(in_features)
 
 
 def run_silu(in_features: Float[Tensor, " ..."]) -> Float[Tensor, " ..."]:
@@ -545,7 +557,7 @@ def get_tokenizer(
     vocab: dict[int, bytes],
     merges: list[tuple[bytes, bytes]],
     special_tokens: list[str] | None = None,
-) -> Any:
+) -> bpe_train.BPEModel:
     """Given a vocabulary, a list of merges, and a list of special tokens,
     return a BPE tokenizer that uses the provided vocab, merges, and special tokens.
 
@@ -561,7 +573,7 @@ def get_tokenizer(
     Returns:
         A BPE tokenizer that uses the provided vocab, merges, and special tokens.
     """
-    raise NotImplementedError
+    return bpe_train.BPEModel(vocab=vocab, merges=merges, special_tokens=special_tokens)
 
 
 def run_train_bpe(
@@ -592,6 +604,4 @@ def run_train_bpe(
                 Merges are ordered by order of creation.
     """
     # raise NotImplementedError
-    return BPETokenizer.bpe_train(
-        input_path, vocab_size, special_tokens, "/home/bker/cs336_2026/assignment1-basics/table"
-    )
+    return bpe_train.bpe_train_test(input_path, vocab_size, special_tokens)
