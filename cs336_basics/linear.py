@@ -23,9 +23,7 @@ class Linear(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = rearrange(x, "... input_shape -> input_shape ...")
-        result = einsum(self.weight, x, "output_shape input_shape, input_shape ... -> output_shape ...").to(
-            device=self.device
-        )
+        result = einsum(self.weight, x, "output_shape input_shape, input_shape ... -> output_shape ...")
         result = rearrange(result, "input_shape ... -> ... input_shape")
         # einsum 使得我们只需要关注各个维度的实际意义即可
         # 一般的来说，我们的投入linear layer的tensor，最后一个维度一边会作为我们的input_dim

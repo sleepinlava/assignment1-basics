@@ -11,7 +11,7 @@ from jaxtyping import Bool, Float, Int
 from torch import Tensor
 
 # we use musa
-from cs336_basics import bpe_train, embedding, linear, rmsnorm
+from cs336_basics import bpe_train, embedding, linear, rmsnorm, swiglu
 
 
 def run_linear(
@@ -72,6 +72,11 @@ def run_swiglu(
     w3_weight: Float[Tensor, " d_ff d_model"],
     in_features: Float[Tensor, " ... d_model"],
 ) -> Float[Tensor, " ... d_model"]:
+
+    model = swiglu.positionwise_feedward(d_model, d_ff)
+    model.weight_1.load_state_dict({"weight": w1_weight})
+    model.weight_2.load_state_dict({"weight": w2_weight})
+    model.weight_3.load_state_dict({"weight": w3_weight})
     """Given the weights of a SwiGLU network, return
     the output of your implementation with these weights.
 
@@ -93,7 +98,8 @@ def run_swiglu(
     # swiglu.w1.weight.data = w1_weight
     # swiglu.w2.weight.data = w2_weight
     # swiglu.w3.weight.data = w3_weight
-    raise NotImplementedError
+    # raise NotImplementedError
+    return model.swiglu(in_features)
 
 
 def run_scaled_dot_product_attention(

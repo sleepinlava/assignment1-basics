@@ -20,8 +20,7 @@ class RMSNorm(nn.Module):
 
         self.device = device
         self.dtype = dtype
-
-        self.weight = nn.Parameter(torch.ones(d_model))
+        self.weight = nn.Parameter(torch.ones(self.d_model))
 
     def rms(self, x: torch.Tensor) -> torch.Tensor:
         in_dtype = x.dtype
@@ -31,9 +30,7 @@ class RMSNorm(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # x = x.to(self.weight.device)
-        return (x / self.rms(x) * self.weight).to(self.device)
-        # result.to(in_dtype?)
-        # pass
+        return x / self.rms(x) * self.weight
 
 
 if __name__ == "__main__":
