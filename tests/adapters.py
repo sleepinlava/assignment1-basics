@@ -10,8 +10,10 @@ import torchada
 from jaxtyping import Bool, Float, Int
 from torch import Tensor
 
+import cs336_basics
+
 # we use musa
-from cs336_basics import bpe_train, embedding, linear, rmsnorm, swiglu
+from cs336_basics import bpe_train, embedding, linear, rmsnorm, rope, softmax, swiglu
 
 
 def run_linear(
@@ -204,6 +206,7 @@ def run_rope(
     in_query_or_key: Float[Tensor, " ... sequence_length d_k"],
     token_positions: Int[Tensor, " ... sequence_length"],
 ) -> Float[Tensor, " ... sequence_length d_k"]:
+    model = rope.RotaryPositionalEmbedding(theta, d_k, max_seq_len)
     """
     Run RoPE for a given input tensor.
 
@@ -216,7 +219,8 @@ def run_rope(
     Returns:
         Float[Tensor, " ... sequence_length d_k"]: Tensor with RoPEd input.
     """
-    raise NotImplementedError
+    # raise NotImplementedError
+    return model(in_query_or_key, token_positions)
 
 
 def run_transformer_block(
@@ -451,7 +455,8 @@ def run_softmax(in_features: Float[Tensor, " ..."], dim: int) -> Float[Tensor, "
         Float[Tensor, "..."]: Tensor of with the same shape as `in_features` with the output of
         softmax normalizing the specified `dim`.
     """
-    raise NotImplementedError
+    # raise NotImplementedError
+    return softmax.softmax(in_features, dim)
 
 
 def run_cross_entropy(

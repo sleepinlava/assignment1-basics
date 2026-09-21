@@ -11,8 +11,6 @@ class positionwise_feedward(nn.Module):
         super().__init__()
         self.d_model = d_model
         self.d_ff = d_ff
-        self.device = device
-        self.dtype = dtype
 
         self.weight_1 = linear.Linear(d_model, d_ff)
         self.weight_2 = linear.Linear(d_ff, d_model)

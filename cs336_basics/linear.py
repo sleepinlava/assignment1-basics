@@ -12,8 +12,6 @@ class Linear(nn.Module):
 
         self.in_features = in_features
         self.out_features = out_features
-        self.device = device
-        self.dtype = dtype
 
         shape_tensor = torch.ones(out_features, in_features, dtype=dtype, device=device)
         rand_w_tensor = trunc_normal_(shape_tensor)
