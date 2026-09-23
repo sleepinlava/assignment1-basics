@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import token
 from collections.abc import Iterable
 from typing import IO, Any, BinaryIO
 
@@ -106,7 +107,7 @@ def run_scaled_dot_product_attention(
     Q: Float[Tensor, " ... queries d_k"],
     K: Float[Tensor, " ... keys d_k"],
     V: Float[Tensor, " ... keys d_v"],
-    mask: Bool[Tensor, " ... queries keys"] | None = None,
+    mask: Bool[Tensor, " ... queries keys"]
 ) -> Float[Tensor, " ... queries d_v"]:
     """
     Given key (K), query (Q), and value (V) tensors, return
@@ -133,6 +134,13 @@ def run_multihead_self_attention(
     o_proj_weight: Float[Tensor, " d_model d_model"],
     in_features: Float[Tensor, " ... sequence_length d_model"],
 ) -> Float[Tensor, " ... sequence_length d_model"]:
+
+    model = attention.multihead_self_attention_class(d_model, num_heads)
+    with torch.no_grad():
+        model.W_k.copy_(k_proj_weight)
+        model.W_q.copy_(q_proj_weight)
+        model.W_v.copy_(v_proj_weight)
+        model.W_o.copy_(o_proj_weight)
     """
     Given the key, query, and value projection weights of a naive unbatched
     implementation of multi-head attention, return the output of an optimized batched
@@ -155,7 +163,8 @@ def run_multihead_self_attention(
         Float[Tensor, " ... sequence_length d_model"]: Tensor with the output of running your optimized, batched multi-headed attention
         implementation with the given QKV projection weights and input features.
     """
-    raise NotImplementedError
+    # raise NotImplementedError
+    return model.forward(in_features)
 
 
 def run_multihead_self_attention_with_rope(
@@ -168,8 +177,16 @@ def run_multihead_self_attention_with_rope(
     v_proj_weight: Float[Tensor, " d_model d_model"],
     o_proj_weight: Float[Tensor, " d_model d_model"],
     in_features: Float[Tensor, " ... sequence_length d_model"],
-    token_positions: Int[Tensor, " ... sequence_length"] | None = None,
+    token_positions: Int[Tensor, " ... sequence_length"],
 ) -> Float[Tensor, " ... sequence_length d_model"]:
+
+    model = attention.multihead_self_attention(d_model, num_heads, max_sequnece_len=max_seq_len, theta=theta)
+    with torch.no_grad():
+        model.W_k.copy_(k_proj_weight)
+        model.W_q.copy_(q_proj_weight)
+        model.W_v.copy_(v_proj_weight)
+        model.W_o.copy_(o_proj_weight)
+
     """
     Given the key, query, and value projection weights of a naive unbatched
     implementation of multi-head attention, return the output of an optimized batched
@@ -195,7 +212,8 @@ def run_multihead_self_attention_with_rope(
         Float[Tensor, " ... sequence_length d_model"]: Tensor with the output of running your optimized, batched multi-headed attention
         implementation with the given QKV projection weights and input features.
     """
-    raise NotImplementedError
+    # raise NotImplementedError
+    return model.forward(in_features, token_positions)
 
 
 def run_rope(
