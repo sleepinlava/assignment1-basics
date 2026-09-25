@@ -11,8 +11,11 @@ import torchada
 from jaxtyping import Bool, Float, Int
 from torch import Tensor
 
+import cs336_basics
+
 # we use musa
-from cs336_basics import attention, bpe_train, embedding, linear, rmsnorm, rope, softmax, swiglu
+from cs336_basics import attention, bpe_train, embedding, linear, pre_norm_transformer, rmsnorm, rope, softmax, swiglu
+from cs336_basics.transformer import transformer_lm
 
 
 def run_linear(
@@ -37,7 +40,7 @@ def run_linear(
     model.load_state_dict({"weight": weights})
 
     # raise NotImplementedError
-    return model.forward(in_features)
+    return model(in_features)
 
 
 def run_embedding(
@@ -62,7 +65,7 @@ def run_embedding(
     """
 
     model.load_state_dict({"weight": weights})
-    return model.forward(token_ids)
+    return model(token_ids)
 
 
 def run_swiglu(
@@ -100,14 +103,14 @@ def run_swiglu(
     # swiglu.w2.weight.data = w2_weight
     # swiglu.w3.weight.data = w3_weight
     # raise NotImplementedError
-    return model.swiglu(in_features)
+    return model(in_features)
 
 
 def run_scaled_dot_product_attention(
     Q: Float[Tensor, " ... queries d_k"],
     K: Float[Tensor, " ... keys d_k"],
     V: Float[Tensor, " ... keys d_v"],
-    mask: Bool[Tensor, " ... queries keys"]
+    mask: Bool[Tensor, " ... queries keys"],
 ) -> Float[Tensor, " ... queries d_v"]:
     """
     Given key (K), query (Q), and value (V) tensors, return
@@ -164,7 +167,7 @@ def run_multihead_self_attention(
         implementation with the given QKV projection weights and input features.
     """
     # raise NotImplementedError
-    return model.forward(in_features)
+    return model(in_features)
 
 
 def run_multihead_self_attention_with_rope(
@@ -213,7 +216,7 @@ def run_multihead_self_attention_with_rope(
         implementation with the given QKV projection weights and input features.
     """
     # raise NotImplementedError
-    return model.forward(in_features, token_positions)
+    return model(in_features, token_positions)
 
 
 def run_rope(
@@ -249,6 +252,19 @@ def run_transformer_block(
     weights: dict[str, Tensor],
     in_features: Float[Tensor, " batch sequence_length d_model"],
 ) -> Float[Tensor, " batch sequence_length d_model"]:
+    model = pre_norm_transformer.pre_norm_transformer(d_model, num_heads, d_ff, max_seq_len, theta)
+
+    with torch.no_grad():
+        model.norm_block_1.weight.copy_(weights["ln1.weight"])
+        model.norm_block_2.weight.copy_(weights["ln2.weight"])
+        model.attention_block.W_q.copy_(weights["attn.q_proj.weight"])
+        model.attention_block.W_k.copy_(weights["attn.k_proj.weight"])
+        model.attention_block.W_v.copy_(weights["attn.v_proj.weight"])
+        model.attention_block.W_o.copy_(weights["attn.output_proj.weight"])
+        model.swiglu_block.weight_1.weight.copy_(weights["ffn.w1.weight"])
+        model.swiglu_block.weight_2.weight.copy_(weights["ffn.w2.weight"])
+        model.swiglu_block.weight_3.weight.copy_(weights["ffn.w3.weight"])
+
     """
     Given the weights of a pre-norm Transformer block and input features,
     return the output of running the Transformer block on the input features.
@@ -310,7 +326,8 @@ def run_transformer_block(
         Float[Tensor, "batch sequence_length d_model"] Tensor with the output of
         running the Transformer block on the input features while using RoPE.
     """
-    raise NotImplementedError
+    # raise NotImplementedError
+    return model(in_features)
 
 
 def run_transformer_lm(
@@ -392,7 +409,62 @@ def run_transformer_lm(
         Float[Tensor, "batch_size sequence_length vocab_size"]: Tensor with the predicted unnormalized
         next-word distribution for each token.
     """
-    raise NotImplementedError
+    model = transformer_lm(
+        vocab_size,
+        context_length,
+        num_layers,
+        d_model,
+        num_heads,
+        d_ff,
+        rope_theta,
+    )
+
+    state_dict = {}
+
+    # embedding
+    state_dict["embedding_block.weight"] = weights["token_embeddings.weight"]
+
+    # transformer blocks
+    for i in range(num_layers):
+        # RMSNorm 1
+        state_dict[f"pre_norm_transformer_block.{i}.norm_block_1.weight"] = weights[f"layers.{i}.ln1.weight"]
+
+        # Attention
+        state_dict[f"pre_norm_transformer_block.{i}.attention_block.W_q"] = weights[f"layers.{i}.attn.q_proj.weight"]
+
+        state_dict[f"pre_norm_transformer_block.{i}.attention_block.W_k"] = weights[f"layers.{i}.attn.k_proj.weight"]
+
+        state_dict[f"pre_norm_transformer_block.{i}.attention_block.W_v"] = weights[f"layers.{i}.attn.v_proj.weight"]
+
+        state_dict[f"pre_norm_transformer_block.{i}.attention_block.W_o"] = weights[
+            f"layers.{i}.attn.output_proj.weight"
+        ]
+
+        # RMSNorm 2
+        state_dict[f"pre_norm_transformer_block.{i}.norm_block_2.weight"] = weights[f"layers.{i}.ln2.weight"]
+
+        # SwiGLU
+        state_dict[f"pre_norm_transformer_block.{i}.swiglu_block.weight_1.weight"] = weights[
+            f"layers.{i}.ffn.w1.weight"
+        ]
+
+        state_dict[f"pre_norm_transformer_block.{i}.swiglu_block.weight_2.weight"] = weights[
+            f"layers.{i}.ffn.w2.weight"
+        ]
+
+        state_dict[f"pre_norm_transformer_block.{i}.swiglu_block.weight_3.weight"] = weights[
+            f"layers.{i}.ffn.w3.weight"
+        ]
+
+    # final RMSNorm
+    state_dict["norm_block.weight"] = weights["ln_final.weight"]
+
+    # LM head
+    state_dict["mlp_block.weight"] = weights["lm_head.weight"]
+
+    model.load_state_dict(state_dict, strict=True)
+
+    return model(in_indices)
 
 
 def run_rmsnorm(
@@ -419,10 +491,11 @@ def run_rmsnorm(
         Float[Tensor,"... d_model"]: Tensor of with the same shape as `in_features` with the output of running
         RMSNorm of the `in_features`.
     """
-    return model.forward(in_features)
+    return model(in_features)
 
 
 def run_silu(in_features: Float[Tensor, " ..."]) -> Float[Tensor, " ..."]:
+    return swiglu.silu(in_features)
     """Given a tensor of inputs, return the output of applying SiLU
     to each element.
 
@@ -433,7 +506,7 @@ def run_silu(in_features: Float[Tensor, " ..."]) -> Float[Tensor, " ..."]:
         Float[Tensor,"..."]: of with the same shape as `in_features` with the output of applying
         SiLU to each element.
     """
-    raise NotImplementedError
+    # raise NotImplementedError
 
 
 def run_get_batch(

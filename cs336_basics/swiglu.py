@@ -4,6 +4,10 @@ from torch import nn, sigmoid
 from cs336_basics import linear
 
 
+def silu(x: torch.Tensor) -> torch.Tensor:
+    """x/(1 + exp(x))"""
+    return x * sigmoid(x)
+
 class positionwise_feedward(nn.Module):
     def __init__(
         self, d_model: int, d_ff: int, device: torch.device | None = None, dtype: torch.device | None = None
@@ -46,7 +50,7 @@ class positionwise_feedward(nn.Module):
         """x/(1 + exp(x))"""
         return x * sigmoid(x)
 
-    def swiglu(self, x: torch.Tensor):
+    def forward(self, x: torch.Tensor):
         # swiglu = new FFN
         # here we combine the gate-control with activate function
         return self.weight_2.forward(self.silu(self.weight_1.forward(x)) * self.weight_3(x))

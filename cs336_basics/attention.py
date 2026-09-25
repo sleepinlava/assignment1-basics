@@ -11,7 +11,7 @@ def scaled_dot_product_attention(
 ) -> torch.Tensor:
     """keys, queries -> (batch_size, ..., seq_len, d_K), values -> (batch_size, ..., seq_len, d_v)
 
-    The original transformer time complex -> O(n^2)
+    The original transformer time complex -> O(n^2 d)
 
     shape (batch_size, ..., seq_len, d_K) -> (batch_size, ..., seq_len, seq_len) -> (batch_size, ..., seq_len, d_v)
 
@@ -159,12 +159,10 @@ class multihead_self_attention(nn.Module):
         self.device = device
         self.dtype = dtype
 
-        weights_kernel = init.kaiming_normal_(torch.Tensor(4, self.d_model, self.d_model))
-
-        self.W_k = nn.Parameter(weights_kernel[0, :])
-        self.W_q = nn.Parameter(weights_kernel[1, :])
-        self.W_v = nn.Parameter(weights_kernel[2, :])
-        self.W_o = nn.Parameter(weights_kernel[3, :])
+        self.W_k = nn.Parameter(init.kaiming_normal_(torch.Tensor(self.d_model, self.d_model)))
+        self.W_q = nn.Parameter(init.kaiming_normal_(torch.Tensor(self.d_model, self.d_model)))
+        self.W_v = nn.Parameter(init.kaiming_normal_(torch.Tensor(self.d_model, self.d_model)))
+        self.W_o = nn.Parameter(init.kaiming_normal_(torch.Tensor(self.d_model, self.d_model)))
 
     def forward(
         self,
