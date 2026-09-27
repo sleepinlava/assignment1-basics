@@ -27,6 +27,6 @@ class pre_norm_transformer(nn.Module):
         tensor_1 = self.attention_block.forward(tensor_0, token_position)
         tensor_2 = tensor_1 + input_feature
         tensor_3 = self.norm_block_2.forward(tensor_2)
-        tensor_4 = self.swiglu_block.swiglu(tensor_3)
+        tensor_4 = self.swiglu_block(tensor_3)
         out_tensor = tensor_2 + tensor_4
         return out_tensor
