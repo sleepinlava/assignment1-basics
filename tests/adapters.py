@@ -7,14 +7,11 @@ from typing import IO, Any, BinaryIO
 
 import numpy.typing as npt
 import torch
-import torchada
 from jaxtyping import Bool, Float, Int
 from torch import Tensor
 
-import cs336_basics
-
-# we use musa
 from cs336_basics import attention, bpe_train, embedding, linear, pre_norm_transformer, rmsnorm, rope, softmax, swiglu
+from cs336_basics.cross_entropy import cross_entropy
 from cs336_basics.transformer import transformer_lm
 
 
@@ -559,12 +556,15 @@ def run_cross_entropy(
         inputs (Float[Tensor, "batch_size vocab_size"]): inputs[i][j] is the
             unnormalized logit of jth class for the ith example.
         targets (Int[Tensor, "batch_size"]): Tensor of shape (batch_size,) with the index of the correct class.
+        叫你nm个batch_size啊，这不是(seq_len, vocab)平面上的(i, answer)点吗 😅
+        不过画个图就理解了，沟槽的命名方法 percy 🫠
             Each value must be between 0 and `num_classes - 1`.
 
     Returns:
         Float[Tensor, ""]: The average cross-entropy loss across examples.
     """
-    raise NotImplementedError
+    # raise NotImplementedError
+    return cross_entropy(inputs, targets)
 
 
 def run_gradient_clipping(parameters: Iterable[torch.nn.Parameter], max_l2_norm: float) -> None:
