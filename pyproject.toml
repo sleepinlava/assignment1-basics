@@ -22,6 +22,7 @@ dependencies = [
     "pympler>=1.1",
     "snakeviz>=2.2.2",
     "torchada>=0.1.86",
+    "matplotlib>=3.11.2",
 ]
 
 [build-system]
