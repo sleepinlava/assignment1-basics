@@ -1,6 +1,6 @@
 import math
 from collections.abc import Callable
-from typing import Optional
+from typing import Iterable, Optional
 
 import matplotlib.pyplot as plt
 import torch
@@ -107,84 +107,103 @@ class AdamW(torch.optim.Optimizer):
         return loss
 
 
+def get_lr_cosine_schedule(t: int, lr_max: float, lr_min: float, t_w: int, t_c: int) -> float:
+    result_lr = 0
+    if t < t_w:
+        result_lr = t / t_w * lr_max
+    elif t_w <= t <= t_c:
+        result_lr = lr_min + 0.5 * (1 + math.cos((t - t_w) / (t_c - t_w) * math.pi)) * (lr_max - lr_min)
+    else:
+        result_lr = lr_min
+
+    return result_lr
+
+
+@torch.no_grad()
+def gradient_clipping(params: Iterable[torch.nn.Parameter], l2_norm_max: float):
+    eps: float = 10**-6
+    params_list: list = [v for v in params if v.grad is not None]
+
+    l2_norm_all = torch.sqrt(sum(p.grad.pow(2).sum() for p in params_list))
+
+    fact = l2_norm_max / (l2_norm_all + eps)
+
+    if l2_norm_all > l2_norm_max:
+        for p in params_list:
+            p.grad.copy_(fact * p.grad)
+
+
+# for p in params_list:
+#     _ = fact * p.grad
+#     p.grad.copy_(_)
+
+
+#     for v in params:
+#
+#
+#
+#     # if l2_norm < l2_norm_max:
+#     #     result = (l2_norm_max) / (l2_norm + eps)
+#     # else:
+#     #     result = l2_norm
+#     return params
+
+
+# torch.norm() -> calculate the tensor norm, implicit return L2 norm, explicit L1 norm, using `torch.norm(p = 1)`
+
+
 if __name__ == "__main__":
     pass
-    # plot_x_1 = [i for i in range(1, 11)]
-    # plot_y_1 = []
-    # plot_x_2 = [i for i in range(1, 11)]
-    # plot_y_2 = []
-    # plot_x_3 = [i for i in range(1, 11)]
-    # plot_y_3 = []
-    # plot_x_4 = [i for i in range(1, 11)]
-    # plot_y_4 = []
-    # weights_1 = torch.nn.Parameter(5 * torch.randn((10, 10)))
-    # weights_2 = torch.nn.Parameter(5 * torch.randn((10, 10)))
-    # weights_3 = torch.nn.Parameter(5 * torch.randn((10, 10)))
-    # weights_4 = torch.nn.Parameter(5 * torch.randn((10, 10)))
-    # opt_1 = SGD([weights_1], lr=1)
-    # opt_2 = SGD([weights_2], lr=1e1)
-    # opt_3 = SGD([weights_3], lr=1e2)
-    # opt_4 = SGD([weights_4], lr=1e3)
-    # for t in range(10):
-    #     opt_1.zero_grad()
-    #     opt_2.zero_grad()
-    #     opt_3.zero_grad()
-    #     opt_4.zero_grad()
-    #
-    #     loss_1 = (weights_1**2).mean()
-    #     loss_2 = (weights_2**2).mean()
-    #     loss_3 = (weights_3**2).mean()
-    #     loss_4 = (weights_4**2).mean()
-    #
-    #     plot_y_1.append(loss_1.cpu().item())
-    #     # print(loss.cpu().item())
-    #     loss_1.backward()
-    #     opt_1.step()
-    #
-    #     plot_y_2.append(loss_2.cpu().item())
-    #     # print(loss.cpu().item())
-    #     loss_2.backward()
-    #     opt_2.step()
-    #
-    #     plot_y_3.append(loss_3.cpu().item())
-    #     # print(loss.cpu().item())
-    #     loss_3.backward()
-    #     opt_3.step()
-    #
-    #     plot_y_4.append(loss_4.cpu().item())
-    #     # print(loss.cpu().item())
-    #     loss_4.backward()
-    #     opt_4.step()
-    #
-    # # fig = plt.figure()
-    # fig, ax = plt.subplots()
-    # plt.plot(plot_x_1, plot_y_1, '--b', label='lr=1')
-    # plt.plot(plot_x_2, plot_y_2, '--r', label='lr=1e1')
-    # plt.plot(plot_x_3, plot_y_3, '--g', label='lr=1e2')
-    # plt.plot(plot_x_4, plot_y_4, '--k', label='lr=1e3')
-    # plt.yscale('log') # 将 y 轴变为对数坐标
-    # plt.xlabel('epochs')
-    # plt.ylabel('grads')
-    # plt.legend()
-    import torch
 
-    # 1. 模拟一个模型参数
-    para = torch.nn.Parameter(torch.ones(3))
-    params = [para]
+    #     import torch
+    #
+    #     # 1. 模拟一个模型参数
+    #     para = torch.nn.Parameter(torch.ones(3))
+    #     params = [para]
+    #
+    #     # 2. 模拟你的错误代码
+    #     for p in params:
+    #         print(f"循环开始时，p的地址: {id(p)}, para的地址: {id(para)}")  # 地址相同
+    #
+    #         # 执行错误的非原位操作
+    #         p = p * 2  # p 的标签被撕下来，贴到了新张量上
+    #
+    #         print(f"执行 p = p * 2 后，p的地址: {id(p)}")  # 地址变了！
+    #         print(f"此时 para 的值: {para.data}")  # 依然是 1, 1, 1，没变！
+    #
+    #     print(f"循环结束后，para 的最终值: {para.data}")  # 依然是 1, 1, 1
+    #
+    #     a = 5
+    #     print(f"before a idx{id(a)}")
+    #     a = a * 2
+    #     print(f"after a idx{id(a)}")
+    #     print(10 - 6)
+    # a = torch.rand(5)
+    # b = torch.rand(5)
+    # print(a , b)
+    # print(torch.stack([a,b]))
 
-    # 2. 模拟你的错误代码
-    for p in params:
-        print(f"循环开始时，p的地址: {id(p)}, para的地址: {id(para)}")  # 地址相同
-
-        # 执行错误的非原位操作
-        p = p * 2  # p 的标签被撕下来，贴到了新张量上
-
-        print(f"执行 p = p * 2 后，p的地址: {id(p)}")  # 地址变了！
-        print(f"此时 para 的值: {para.data}")  # 依然是 1, 1, 1，没变！
-
-    print(f"循环结束后，para 的最终值: {para.data}")  # 依然是 1, 1, 1
-
-    a = 5
-    print(f"before a idx{id(a)}")
-    a = a * 2
-    print(f"after a idx{id(a)}")
+    #     # 错误写法：generator
+    #     def bad(params):
+    #         params = (p for p in params if p.grad is not None)
+    #         if not params:
+    #             print("空！")
+    #         total = sum(p.grad.sum() for p in params)   # 耗尽
+    #         count = sum(1 for p in params)              # 这里是 0
+    #         print(f"处理了 {count} 个参数")
+    #
+    #     # 正确写法：list
+    #     def good(params):
+    #         params = [p for p in params if p.grad is not None]
+    #         if not params:
+    #             print("空！")
+    #         total = sum(p.grad.sum() for p in params)   # 不耗尽
+    #         count = sum(1 for p in params)              # 正确计数
+    #         print(f"处理了 {count} 个参数")
+    #
+    #     model = torch.nn.Linear(10, 10)
+    #     loss = model(torch.rand(1, 10)).sum()
+    #     loss.backward()
+    #
+    #     print(bad(model.parameters()))
+    #     print(good(model.parameters()))
