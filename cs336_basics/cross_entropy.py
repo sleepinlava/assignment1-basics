@@ -4,6 +4,7 @@ import torch
 
 
 def cross_entropy(logits: torch.Tensor, tagert: torch.Tensor) -> torch.Tensor:
+    # tager -> 主要作用是起到索引目标的张量的作用
     """some function MAY BE DESTORYED YOUR TENSOR SHAPE 😅
     And use your FUCKING REAL NAME 😅😅😅,
     DO NOT Because use the FUCKING STUPID name to disturb other one's brain

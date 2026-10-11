@@ -1,208 +1,3 @@
-# import multiprocessing as mp
-# import os
-# from collections import defaultdict
-# from typing import BinaryIO
-
-# import regex as reg
-
-
-# def str_to_bytes_func(input_list: list[str]) -> list[bytes]:
-#     bytes_list: list[bytes] = [item.encode("utf-8") for item in input_list]
-#     return bytes_list
-
-
-# def find_chunk_boundaries(
-#     file: BinaryIO,
-#     desired_num_chunks: int,
-#     split_special_tokens,  # 可以是 bytes，也可以是 list[bytes]
-# ) -> list[int]:
-#     """
-#     将文件切分成可以独立计数的块。
-#     支持多个 special token 作为分块边界。
-#     如果边界重叠，返回的块数可能少于 desired_num_chunks。
-#     """
-#     # 兼容单个 bytes 或多个 bytes
-#     if isinstance(split_special_tokens, bytes):
-#         split_special_tokens = [split_special_tokens]
-#     assert all(isinstance(t, bytes) for t in split_special_tokens), "每个 special token 必须表示为 bytestring"
-
-#     # 获取文件大小
-#     file.seek(0, os.SEEK_END)
-#     file_size = file.tell()
-#     file.seek(0)
-
-#     chunk_size = file_size // desired_num_chunks
-
-#     # 初始均匀分布的边界估计值
-#     chunk_boundaries = [i * chunk_size for i in range(desired_num_chunks + 1)]
-#     chunk_boundaries[-1] = file_size
-
-#     mini_chunk_size = 4096
-#     max_token_len = max(len(t) for t in split_special_tokens)
-#     overlap = max_token_len - 1  # 用于检测跨 mini chunk 的 special token
-
-#     for bi in range(1, len(chunk_boundaries) - 1):
-#         initial_position = chunk_boundaries[bi]
-#         file.seek(initial_position)
-
-#         tail = b""  # 上一次读取的末尾，用于跨块匹配
-#         region_start = initial_position  # search_region 在文件中的起始绝对位置
-
-#         while True:
-#             mini_chunk = file.read(mini_chunk_size)
-#             if mini_chunk == b"":
-#                 # 到达 EOF，边界放到文件末尾
-#                 chunk_boundaries[bi] = file_size
-#                 break
-
-#             search_region = tail + mini_chunk
-
-#             # 在所有 special token 中找到最早出现的位置
-#             earliest = -1
-#             for tok in split_special_tokens:
-#                 p = search_region.find(tok)
-#                 if p != -1 and (earliest == -1 or p < earliest):
-#                     earliest = p
-
-#             if earliest != -1:
-#                 chunk_boundaries[bi] = region_start + earliest
-#                 break
-
-#             # 没找到：准备下一次循环
-#             # 保留末尾 overlap 个字节，防止 token 跨两个 mini_chunk 被漏掉
-#             keep = min(len(search_region), overlap)
-#             tail = search_region[-keep:] if keep > 0 else b""
-#             region_start = region_start + len(search_region) - len(tail)
-
-#     # 去掉重复边界，可能少于 desired_num_chunks
-#     return sorted(set(chunk_boundaries))
-
-
-# def pretoken_child_func(args):
-#     """
-#     act as the child function in mulitprocessing file
-#     """
-#     vocab_dict = defaultdict(int)
-#     input_path, start_index, end_index, special_tokens, pat = args
-#     with open(input_path, "rb") as f:
-#         f.seek(start_index)
-#         cut_chunks = f.read(end_index - start_index).decode("utf-8")
-#         chunks = reg.split("|".join(map(reg.escape, special_tokens)), cut_chunks)
-#         for corpus in chunks:
-#             for token in reg.finditer(pat, corpus):
-#                 tmp = token.group().encode("utf-8")
-#                 vocab_dict[tuple(tmp[i : i + 1] for i in range(0, len(tmp)))] += 1
-#     return dict(vocab_dict)
-
-
-# def pretoken_par_func(input_path: str, special_tokens: list[str]) -> dict[tuple[bytes, ...], int]:
-#     # Match Pattern
-#     PAT = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
-
-#     vocab_dict = defaultdict(int)
-#     bytes_sp_tokens: list[bytes] = str_to_bytes_func(special_tokens)
-#     num_process: int = mp.cpu_count()
-#     index_chunks_list: list[int] = []
-
-#     with open(input_path, "rb") as f:
-#         index_chunks_list = find_chunk_boundaries(f, num_process, bytes_sp_tokens)
-
-#     task_arg: list = []
-#     # Q:为什么我们这里用 len(index_chunks_list) - 1
-#     # A: 因为我们这里是一个有重叠的，也就是说 list_(n - 1)[i - 1] -> list_n[i] 是等价的
-#     # 为了避免我们的终点超出我们的文件大小，so do that
-#     for index in range(len(index_chunks_list) - 1):
-#         start = index_chunks_list[index]
-#         end = index_chunks_list[index + 1]
-#         task_arg.append((input_path, start, end, special_tokens, PAT))
-
-#     with mp.Pool(num_process) as p:
-#         results = p.map(pretoken_child_func, task_arg)
-#         # result是由多个并行处理后的结果向叠加起来的结果
-#         # 最后需要一个一个取出结果并合并
-
-#     for result in results:
-#         for key, value in result.items():
-#             vocab_dict[key] += value
-#     return vocab_dict
-
-# def merge_token(token, pair):
-#     new_tokens = []
-#     i = 0
-#     while i < len(token):
-#         if i < len(token) - 1 and token[i] == pair[0] and token[i + 1] == pair[1]:
-#             new_tokens.append(token[i] + token[i + 1])
-#             i += 2
-#         else:
-#             new_tokens.append(token[i])
-#             i += 1
-#     return tuple(new_tokens)
-
-
-# def string_merge_loop(train_times, input_dict, result_list, record_list):
-#     result_set = set(result_list)
-
-#     for _ in range(train_times):
-#         pair_freq = defaultdict(int)
-
-#         # 1. 统计所有 pair 频次
-#         for token, freq in input_dict.items():
-#             for i in range(len(token) - 1):
-#                 pair = (token[i], token[i + 1])
-#                 pair_freq[pair] += freq
-
-#         if not pair_freq:
-#             break
-
-#         # 2. 选 best_pair
-#         best_pair = max(pair_freq, key=lambda p: (pair_freq[p], p))
-
-#         # 3. 记录规则，只记录一次
-#         merged = best_pair[0] + best_pair[1]
-#         if merged not in result_set:
-#             result_list.append(merged)
-#             record_list.append(best_pair)
-#             result_set.add(merged)
-
-#         # 4. 遍历所有 token 合并，保留不包含 best_pair 的 token
-#         new_input_dict = defaultdict(int)
-#         for token, freq in input_dict.items():
-#             new_token = merge_token(token, best_pair)
-#             new_input_dict[new_token] += freq
-
-#         input_dict = new_input_dict
-
-# def bpe_train(
-#     input_path: str, vocab_size: int, special_tokens: list[str]
-# ) -> tuple[dict[int, bytes], list[tuple[bytes, bytes]]]:
-
-#     bpe_train_table: list[bytes, ...] = []
-#     bpe_record_list: list[bytes, ...] = []
-
-#     index_sp = 0
-#     index_bpe_table: dict[int:bytes] = {i: bytes([i]) for i in range(256)}
-#     for item in special_tokens:
-#         index_bpe_table[256 + index_sp] = item.encode("utf-8")
-#         index_sp += 1
-
-#     length_special_token: int = len(special_tokens)
-#     num_merge: int = vocab_size - 256 - length_special_token
-
-#     pretoken_result = pretoken_par_func(input_path, special_tokens)
-#     string_merge_loop(num_merge, pretoken_result, bpe_train_table, bpe_record_list)
-
-#     index_bpe = 0
-#     for item in bpe_train_table:
-#         index_bpe_table[256 + length_special_token + index_bpe] = item
-#         index_bpe += 1
-
-#     return (index_bpe_table, bpe_record_list)
-
-
-# if __name__ == "__main__":
-#     pass
-
-
 import heapq
 import multiprocessing as mp
 import os
@@ -221,6 +16,7 @@ PICKLE_VERSION = 1
 # 1. 通用：分块 / 预分词
 # ============================================================
 def str_to_bytes_func(input_list: list[str]) -> list[bytes]:
+    """将str格式的数据转换为bytes"""
     return [item.encode("utf-8") for item in input_list]
 
 
@@ -323,6 +119,9 @@ def pretoken_child_func(args):
 
 
 def pretoken_par_func(input_path: str, special_tokens: list[str]) -> dict[tuple[bytes, ...], int]:
+    """
+    多线程处理我们的文件读入，核心是分块而治
+    """
     bytes_sp_tokens = str_to_bytes_func(special_tokens)
     num_process = mp.cpu_count()
 
@@ -340,7 +139,7 @@ def pretoken_par_func(input_path: str, special_tokens: list[str]) -> dict[tuple[
         return dict(vocab_dict)
 
     actual_num_process = min(num_process, len(task_arg))
-    ctx = mp.get_context()
+    ctx = mp.get_context("forkserver")
     with ctx.Pool(actual_num_process) as p:
         results = p.map(pretoken_child_func, task_arg)
 
@@ -579,12 +378,26 @@ class BPEModel:
         return piece
 
     def encode(self, text: str) -> list[int]:
+        """
+        把一段文本编码成 token id 列表。核心流程（BPE encode 三步走）：
+
+          1. 先按 special token 把文本切开（special token 永远不参与 BPE，单独成 token）；
+          2. 对每个普通片段用预分词正则 PAT 切成“词/标点/空白”小块；
+          3. 每块先拆成单字节，再按训练得到的 merge 优先级反复合并，最后查表换成 id。
+
+        【本次修改】正则 alternation 是 “最左-最先” 匹配，
+        若把短 special token 排在长 token 前面，
+        `"<|endoftext|><|endoftext|>"` 会先被 `"<|endoftext|>"` 吃掉，导致没法整体匹配。
+        因此这里按长度从长到短排序后再拼 alternation，保证“最长前缀优先”，
+        重叠 special token 测试（test_overlapping_special_tokens）才能通过。
+        """
         token_to_id = self.token_to_id
         ids: list[int] = []
 
         # 1) 按 special token 切分，保留分隔符
         if self.special_tokens:
-            pat = "(" + "|".join(map(reg.escape, self.special_tokens)) + ")"
+            ordered = sorted(self.special_tokens, key=len, reverse=True)
+            pat = "(" + "|".join(map(reg.escape, ordered)) + ")"
             chunks = reg.split(pat, text)
         else:
             chunks = [text]
@@ -593,15 +406,71 @@ class BPEModel:
         for chunk in chunks:
             if not chunk:
                 continue
+            # 分隔符本身就是 special token，直接查表成 id，不做 BPE
             if chunk in special_set:
                 ids.append(token_to_id[chunk.encode("utf-8")])
                 continue
+            # 2) 普通片段：预分词 + BPE 合并 + 映射为 id
             for m in reg.finditer(self.pat, chunk):
                 raw = m.group().encode("utf-8")
                 piece = tuple(bytes([b]) for b in raw)
                 for b in self._bpe(piece):
                     ids.append(token_to_id[b])
         return ids
+
+    def encode_iterable(self, iterable):
+        """
+        惰性（流式）编码一个字符串可迭代对象，例如 `open(path)` 逐行读文件，
+        逐 token `yield` id，避免一次性把整个语料读进内存。
+
+        核心思路：
+          不能简单地“每读一行就 encode 一次”。因为预分词正则会跨行匹配
+          （例如连续空行会被合并成同一个空白片段），逐行 encode 会得到和
+          `encode(整段文本)` 不同的 token 序列。
+
+          所以这里只在“完整的 special token”处真正切分并输出：
+            - 缓存 buffer；
+            - 只要 buffer 里出现完整 special token，就把它前面的普通文本 encode 掉、
+              产出这些 id，再单独产出 special token 的 id，然后从 buffer 中删掉已处理部分；
+            - 若暂时找不到完整 special token，就继续往后缓存——这样即使 special token
+              被切成两次读入，也能在拼回完整后正确识别。
+            - 迭代结束时把剩余 buffer 一次性 encode 并产出。
+
+          这样既保证了与 `encode(concat(iterable))` 结果完全一致，
+          又只需要在内存里保留“还没遇到 special token 的那一段”。
+
+        【本次修改】这就是之前缺失、导致 3 个 test_encode_iterable_* 报
+        `AttributeError: 'BPEModel' object has no attribute 'encode_iterable'` 的方法。
+        同时它也复用了上面按长度倒序的 special token 顺序，兼容重叠 token。
+        """
+        specials = sorted(self.special_tokens, key=len, reverse=True)
+        token_to_id = self.token_to_id
+        buffer = ""
+
+        for chunk in iterable:
+            buffer += chunk
+            while True:
+                # 在 buffer 中找出现位置最靠前的 special token
+                # （specials 已按长度倒序，同一位置长度更长的优先）
+                best_idx = -1
+                best_tok = ""
+                for tok in specials:
+                    idx = buffer.find(tok)
+                    if idx != -1 and (best_idx == -1 or idx < best_idx):
+                        best_idx = idx
+                        best_tok = tok
+                if best_idx == -1:
+                    break
+                # special 前面的普通文本单独编码
+                if best_idx > 0:
+                    yield from self.encode(buffer[:best_idx])
+                # special 本身单独成一个 id
+                yield token_to_id[best_tok.encode("utf-8")]
+                buffer = buffer[best_idx + len(best_tok) :]
+
+        # 收尾：处理最后一段（没有 special token 结尾）的普通文本
+        if buffer:
+            yield from self.encode(buffer)
 
     def decode(self, ids: list[int]) -> str:
         data = b"".join(self.vocab[i] for i in ids)
@@ -701,16 +570,17 @@ def bpe_train(
 # 5. 使用示例
 # ============================================================
 if __name__ == "__main__":
-    # # ---- 训练并保存 ----
-    # model = bpe_train(
-    #     input_path="/home/bker/cs336_2026/assignment1-basics/data/TinyStoriesV2-GPT4-train.txt",
-    #     vocab_size=10000,
-    #     special_tokens=["<|endoftext|>"]
-    #     save_path="/home/bker/cs336_2026/assignment1-basics/checkpoints/bpe_tinystory.pkl",
-    # )
     pass
+    # ---- 训练并保存 ----
+    # model = bpe_train(
+    #     input_path="/home/sleepinlava/Projects/python/cs336/assignment1-basics/data/TinyStoriesV2-GPT4-train.txt",
+    #     vocab_size=50257,
+    #     special_tokens=["<|endoftext|>"],
+    #     save_path="/home/sleepinlava/Projects/python/cs336/assignment1-basics/checkpoints/bpe_tinystory_gpt.pkl",
+    # )
+    # pass
     # ---- 之后只用加载 ----
-    # model = BPEModel.load("checkpoints/bpe_1000.pkl")
+    # model = BPEModel.load("checkpoints/bpe_50257.pkl")
 
     # ids = model.encode("Hello world! <|endoftext|> 你好")
     # print(ids)

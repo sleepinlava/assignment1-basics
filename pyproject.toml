@@ -23,6 +23,7 @@ dependencies = [
     "snakeviz>=2.2.2",
     "torchada>=0.1.86",
     "matplotlib>=3.11.2",
+    "jupyter>=1.1.1",
 ]
 
 [build-system]
