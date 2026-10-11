@@ -15,8 +15,9 @@ class embedding(nn.Module):
 
         self.num_embeddings = num_embeddings
         self.embedding_dim = embedding_dim
+        self.device = device
 
-        embedding_shape_matrix = torch.ones(self.num_embeddings, self.embedding_dim)
+        embedding_shape_matrix = torch.ones(self.num_embeddings, self.embedding_dim, device=self.device)
         # in my opinion,
         # embedding_dim <-> batch_num | num_embeddings <-> seq_num
         embedding_matrix = trunc_normal_(embedding_shape_matrix, a=-1, b=1)
@@ -43,7 +44,7 @@ class embedding(nn.Module):
         # it is a 64 bits intgeters -> troch.int64
         # always in CPU(and can put it into GPU), and not support to grad
         # we usually use it in index, labels, int computes
-        
+
         # token_ids 是形状为 (B, L) 的整数矩阵，每个元素是词表中的 token id，取值范围 [0, V-1]。
         # Embedding 权重 weight 形状为 (V, D)，其中 V 是词表大小，D 是 embedding 维度。
         # 高级索引 self.weight[token_ids] 的逻辑是：对每个 token_ids[b, l] 取 weight 的第

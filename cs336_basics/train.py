@@ -148,7 +148,7 @@ def full_train(
 
 if __name__ == "__main__":
     hyper_params: dict = {
-        "vocab_size": 9999,
+        "vocab_size": 50257,
         "context_length": 1024,
         "num_layers": 12,
         "d_model": 768,
@@ -164,16 +164,16 @@ if __name__ == "__main__":
         "weight_decay": 0.1,
         "betas": (0.9, 0.99),
         "eps": (1e-8),
-        "device": torch.device("cpu"),
+        "device": torch.device("cuda"),
         "batch_size": 10,
         "train_context_length": 64,
     }
 
-    model = transformer_lm(9999, 1024, 12, 768, 12, 2048, 0.01)
+    model = transformer_lm(50257, 1024, 12, 768, 12, 2048, 10000, device = torch.device("cuda"))
 
     full_train(
-        "/home/sleepinlava/Projects/python/cs336/assignment1-basics/data/test.bin",
-        "/home/sleepinlava/Projects/python/cs336/assignment1-basics/weights/test.pth",
+        "/root/autodl-tmp/assignment1-basics/data/test.bin",
+        "/root/autodl-tmp/assignment1-basics/weights/test.pth",
         1000,
         model,
         hyper_params,

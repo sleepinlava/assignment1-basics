@@ -159,10 +159,12 @@ class multihead_self_attention(nn.Module):
         self.device = device
         self.dtype = dtype
 
-        self.W_k = nn.Parameter(init.kaiming_normal_(torch.Tensor(self.d_model, self.d_model)))
-        self.W_q = nn.Parameter(init.kaiming_normal_(torch.Tensor(self.d_model, self.d_model)))
-        self.W_v = nn.Parameter(init.kaiming_normal_(torch.Tensor(self.d_model, self.d_model)))
-        self.W_o = nn.Parameter(init.kaiming_normal_(torch.Tensor(self.d_model, self.d_model)))
+        self.W_k = nn.Parameter(init.kaiming_normal_(torch.Tensor(self.d_model, self.d_model)).to(self.device))
+        self.W_q = nn.Parameter(init.kaiming_normal_(torch.Tensor(self.d_model, self.d_model)).to(self.device))
+        self.W_v = nn.Parameter(init.kaiming_normal_(torch.Tensor(self.d_model, self.d_model)).to(self.device))
+        self.W_o = nn.Parameter(init.kaiming_normal_(torch.Tensor(self.d_model, self.d_model)).to(self.device))
+
+        self.Rope = rope.RotaryPositionalEmbedding(self.theta, self.d_qkv, self.max_sequnece_len, device=self.device)
 
     def forward(
         self,
@@ -180,23 +182,23 @@ class multihead_self_attention(nn.Module):
         k = x @ self.W_k.T
         v = x @ self.W_v.T
 
-        Rope = rope.RotaryPositionalEmbedding(self.theta, self.d_qkv, self.max_sequnece_len)
-
         # we lack of the causal mask and RoPE
 
-        Q = rearrange(q, "batch seq_len_q (h d_q) -> batch h seq_len_q d_q", h=self.num_heads)
-        K = rearrange(k, "batch seq_len_k (h d_k) -> batch h seq_len_k d_k", h=self.num_heads)
-        V = rearrange(v, "batch seq_len_v (h d_v) -> batch h seq_len_v d_v", h=self.num_heads)
+        Q = rearrange(q, "batch seq_len_q (h d_q) -> batch h seq_len_q d_q", h=self.num_heads).to(x.device)
+        K = rearrange(k, "batch seq_len_k (h d_k) -> batch h seq_len_k d_k", h=self.num_heads).to(x.device)
+        V = rearrange(v, "batch seq_len_v (h d_v) -> batch h seq_len_v d_v", h=self.num_heads).to(x.device)
 
-        Q_r = Rope.forward(Q, token_position)
-        K_r = Rope.forward(K, token_position)
+        Q_r = self.Rope.forward(Q, token_position)
+        K_r = self.Rope.forward(K, token_position)
 
         QK_result = (
             einsum(Q_r, K_r, "batch head seq_len_q d, batch head seq_len_k d -> batch head seq_len_q seq_len_k")
             / self.scale_fact
         )
 
-        bool_mask = torch.triu(torch.ones(QK_result.shape[-2], QK_result.shape[-1]), 1).bool()
+        bool_mask = torch.triu(
+            torch.ones(QK_result.shape[-2], QK_result.shape[-1], device=QK_result.device, dtype=torch.bool), 1
+        ).bool()
 
         QK_masked = QK_result.masked_fill(bool_mask, -1e8)
 

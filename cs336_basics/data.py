@@ -25,10 +25,10 @@ def data_load(
     # 或者换句话来说，我们需要一个合理的方法将list
     # 转换为np类型
 
-    sample_tensor = torch.tensor(np.stack(sample_list)).to(device).to(torch.LongTensor())
-    label_tensor = torch.tensor(np.stack(label_list), dtype=torch.int32).to(device)
+    sample_tensor = torch.tensor(np.stack(sample_list), dtype=torch.long, device=device)
+    label_tensor = torch.tensor(np.stack(label_list), dtype=torch.long, device=device)
 
-    return (sample_tensor, label_tensor)
+    return sample_tensor, label_tensor
 
 
 def save_checkpoint(
@@ -76,6 +76,7 @@ if __name__ == "__main__":
     # print(lr)
     # for _ in rr:
     #     print(test_list[_])
-    a = np.array([[1, 2, 3, 4], [1, 2, 3, 4], [1, 2, 3, 4]])
-    print(a)
-    print(np.stack(a))
+    # a = np.array([[1, 2, 3, 4], [1, 2, 3, 4], [1, 2, 3, 4]])
+    # print(a)
+    # print(np.stack(a))
+    pass

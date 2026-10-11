@@ -8,6 +8,7 @@ def silu(x: torch.Tensor) -> torch.Tensor:
     """x/(1 + exp(x))"""
     return x * sigmoid(x)
 
+
 class positionwise_feedward(nn.Module):
     def __init__(
         self, d_model: int, d_ff: int, device: torch.device | None = None, dtype: torch.device | None = None
@@ -15,10 +16,11 @@ class positionwise_feedward(nn.Module):
         super().__init__()
         self.d_model = d_model
         self.d_ff = d_ff
+        self.device = device
 
-        self.weight_1 = linear.Linear(d_model, d_ff)
-        self.weight_2 = linear.Linear(d_ff, d_model)
-        self.weight_3 = linear.Linear(d_model, d_ff)
+        self.weight_1 = linear.Linear(d_model, d_ff, device)
+        self.weight_2 = linear.Linear(d_ff, d_model, device)
+        self.weight_3 = linear.Linear(d_model, d_ff, device)
 
         """
 

@@ -10,15 +10,16 @@ class RotaryPositionalEmbedding(nn.Module):
         self.theta = theta
         self.d_k = d_k
         self.max_seq_len = max_seq_len
+        self.device = device
 
         # 1. 计算逆频率 inv_freq
         # 公式: theta_i = theta^(-2i / d_k), i 属于 [0, d_k/2)
-        i = torch.arange(0, d_k, 2).float()
+        i = torch.arange(0, d_k, 2, device=self.device, dtype=torch.float32)
         inv_freq = 1.0 / (theta ** (i / d_k))  # shape = (d_k // 2, )
 
         # 计算位置position
         # torch.arange(n) = range(n)
-        m = torch.arange(max_seq_len).float()  # shape = (max_seq_len, )
+        m = torch.arange(max_seq_len, device=self.device, dtype=torch.float32)  # shape = (max_seq_len, )
 
         # 得到全量矩阵
         freqs_matrix = torch.outer(m, inv_freq)  # shape = (inv_freq, m)
@@ -29,14 +30,17 @@ class RotaryPositionalEmbedding(nn.Module):
         self.register_buffer("cos_table", torch.cos(freqs_matrix), persistent=False)
         self.register_buffer("sin_table", torch.sin(freqs_matrix), persistent=False)
 
+        if self.device is not None:
+            self.to(device)
+
     def forward(self, x: torch.Tensor, token_positions: torch.Tensor) -> torch.Tensor:
         """arXiv:2104.09864v5 [cs.CL] 8 Nov 2023中的旋转矩阵高效实现方法实现，具体实现公式见论文"""
         # 1. 根据 token_positions 对预计算的 cos 和 sin 张量进行切片
         # 利用 PyTorch 的高级索引和广播机制：
         # cos 和 sin 的形状将被广播为 (..., seq_len, d_k // 2)
         # 这完美容忍了任意数量的批量维度（如 batch, heads 等）
-        cos = self.cos_table[token_positions]
-        sin = self.sin_table[token_positions]
+        cos = self.cos_table[token_positions].to(self.device)
+        sin = self.sin_table[token_positions].to(self.device)
         # 这里的核心作用是调整我们的cos/sin_table的
 
         # 2. 使用 einops 将 x 最后一个维度拆分为 (d_k // 2, 2)
