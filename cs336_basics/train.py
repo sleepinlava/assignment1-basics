@@ -21,12 +21,9 @@ def evaluate_fn(model: nn.Module, data_array: np.memmap, hyper_params: dict):
     context_length = hyper_params["context_length"]
     eval_device = hyper_params["device"]
 
-    total_loss, correct, total = -1e5, -1e5, -1e5
-
     x, y = data_load(data_array, batch_size, context_length, eval_device)
 
     logits = model(x)
-    loss = cross_entropy(logits, y)
 
     preds = softmax(logits, dim=-1).argmax(dim=-1)
 
@@ -42,6 +39,8 @@ def single_train(
     data_array: np.memmap,
     global_train_times: int,
 ):
+
+    model.train()
 
     batch_size = hyper_params["batch_size"]
     train_context_length = hyper_params["train_context_length"]
@@ -76,105 +75,138 @@ def single_train(
 
 
 def full_train(
-    data_load_path: str,
+    train_data_load_path: str,
+    vaild_data_load_path: str,
     output_path: str,
     train_times: int,
     model: nn.Module,
     hyper_params: dict,
-    model_load_path=None,
+    checkpoint_load_path=None,
     load_from_former=False,
 ) -> None:
 
-    model.train()
-
     plt.ion()  # plt的交互模式
-    fig, ax = plt.subplots()
+    fig_1, ax = plt.subplots()
+
+    fig_2, bx = plt.subplots()
+
     train_losses = []
     train_steps = []
 
-    (line,) = ax.plot([], [], label="Train Loss")
+    vaild_acc = []
+    vaild_steps = []
+
+    (line1,) = ax.plot([], [], label="Train Loss")
     ax.set_xlabel("train steps")
     ax.set_ylabel("train loss")
     ax.grid(True)
     ax.legend()
 
+    (line2,) = bx.plot([], [], label="vaild acc")
+    bx.set_xlabel("vaild steps")
+    bx.set_ylabel("vaild acc")
+    bx.grid(True)
+    bx.legend()
+
     single_loss = 1e9
+    total_acc = -1e5
     run_times = 0
     max_lr = hyper_params["max_lr"]
     weight_decay = hyper_params["weight_decay"]
     betas = hyper_params["betas"]
     eps = hyper_params["eps"]
 
-    data_list = np.memmap(data_load_path, dtype=np.uint32, mode="r")
+    train_data_list = np.memmap(train_data_load_path, dtype=np.uint32, mode="r")
+    vaild_data_list = np.memmap(vaild_data_load_path, dtype=np.uint32, mode="r")
 
     opt = AdamW(model.parameters(), max_lr, weight_decay, betas, eps)
     # 想一想正弦调整学习率的目的是什么
 
     if load_from_former == True:
-        if model_load_path is not None:
-            run_times = load_checkpoint(model_load_path, model, opt)
+        if checkpoint_load_path is not None:
+            run_times = load_checkpoint(checkpoint_load_path, model, opt)
         else:
             raise ValueError("No Model Path was inputed")
 
     for t in range(train_times - run_times):
-        train_loss = single_train(model, hyper_params, opt, data_list, t + run_times)
-        if single_loss > train_loss:
-            single_loss = min(single_loss, train_loss)
-            save_checkpoint(model, opt, train_times, output_path)
+        train_loss = single_train(model, hyper_params, opt, train_data_list, t + run_times)
 
         with torch.no_grad():
-            train_steps.append(t)
-            train_losses.append(train_loss.item())
+            acc = evaluate_fn(model, vaild_data_list, hyper_params)
 
-            line.set_data(train_steps, train_losses)
+            train_steps.append(t)
+            vaild_steps.append(t)
+            train_losses.append(train_loss.item())
+            vaild_acc.append(acc.item())
+
+            line1.set_data(train_steps, train_losses)
+            line2.set_data(vaild_steps, vaild_acc)
 
             # 动态调整坐标轴
             ax.relim()
+            bx.relim()
             ax.autoscale_view()
+            bx.autoscale_view()
 
             # refresh fig
 
-            fig.canvas.draw_idle()
+            fig_1.canvas.draw_idle()
+            fig_2.canvas.draw_idle()
             plt.pause(0.01)
-            plt.savefig("./loss.png")
+            plt.pause(0.01)
+            fig_1.savefig("./loss.png")
+            fig_2.savefig("./acc.png")
 
-        print(f"epoch is {t}, and the loss is {train_loss}")
+        print(f"epoch is {t}, and the loss is {train_loss}, the acc is {acc}")
         # 使用t + run_times的目的
         # 因为我们这里实际上要实现在整个周期上进行学习率的正弦调节
         # 如果只使用t的话会丢失前面学习率的调节
-
-    torch.save(model.state_dict(), "test.pth")
+        if single_loss > train_loss and acc > total_acc:
+            single_loss = min(single_loss, train_loss)
+            total_acc = max(acc, total_acc)
+            save_checkpoint(model, opt, t, output_path)
+            torch.save(model.state_dict(), "full_weights.pth")
 
 
 if __name__ == "__main__":
     hyper_params: dict = {
         "vocab_size": 50257,
-        "context_length": 1024,
-        "num_layers": 12,
-        "d_model": 768,
-        "num_heads": 12,
-        "d_ff": 2048,
+        "context_length": 128,
+        "num_layers": 2,
+        "d_model": 128,
+        "num_heads": 4,
+        "d_ff": 352,
         "theta": 10000.0,
         "train_times": 0,
         "max_lr": 3e-4,
         "min_lr": 3e-5,
-        "t_w": 50,
-        "t_c": 1000,
-        "l2_norm_max": 1,
+        "t_w": 5,
+        "t_c": 100,
+        "l2_norm_max": 1.0,
         "weight_decay": 0.1,
         "betas": (0.9, 0.99),
         "eps": (1e-8),
-        "device": torch.device("cuda"),
-        "batch_size": 10,
+        "device": torch.device("cpu"),
+        "batch_size": 4,
         "train_context_length": 64,
     }
 
-    model = transformer_lm(50257, 1024, 12, 768, 12, 2048, 10000, device = torch.device("cuda"))
+    model = transformer_lm(50257, 128, 2, 128, 4, 352, 10000.0, device=hyper_params["device"])
+    # model.load_state_dict(
+    #     torch.load(
+    #         "/home/sleepinlava/Projects/python/cs336/assignment1-basics/cs336_basics/test.pth",
+    #         map_location="cpu",
+    #         weights_only=True,
+    #     )
+    # )
+
+    # print(evaluate_fn(model, ))
 
     full_train(
-        "/root/autodl-tmp/assignment1-basics/data/test.bin",
-        "/root/autodl-tmp/assignment1-basics/weights/test.pth",
-        1000,
+        "/home/sleepinlava/Projects/python/cs336/assignment1-basics/cs336_basics/test.bin",
+        "/home/sleepinlava/Projects/python/cs336/assignment1-basics/cs336_basics/vaild.bin",
+        "/home/sleepinlava/Projects/python/cs336/assignment1-basics/cs336_basics/test.pth",
+        5000,
         model,
         hyper_params,
     )
@@ -182,18 +214,18 @@ if __name__ == "__main__":
     # pass
     # enc = tiktoken.get_en        gradient_clipping(model.parameters(), 1)
     # with open(
-    #     "/home/sleepinlava/Projects/python/cs336/assignment1-basics/data/TinyStoriesV2-GPT4-valid.txt",
+    #     "/home/sleepinlava/Projects/python/cs336/assignment1-basics/data/owt_valid.txt",
     #     encoding="utf-8",
     # ) as f:
     #     text = f.read()
     # # ids = enc.encode_ordinary(text)
     # bpe_model = BPEModel.load(
-    #     "/home/sleepinlava/Projects/python/cs336/assignment1-basics/checkpoints/bpe_tinystory.pkl"
+    #     "/home/sleepinlava/Projects/python/cs336/assignment1-basics/checkpoints/bpe_tinystory_gpt.pkl"
     # )
-    # print(model.vocab.items())
-    # ids = model.encode(text)
+    # # print(model.vocab.items())
+    # ids = bpe_model.encode(text)
     # arr = np.array(ids, dtype=np.uint32)
-    # arr.tofile("test.bin")
+    # arr.tofile("vaild.bin")
     # # print(arr[0:1000])
     # print(arr.max(), arr.shape, arr.size)
 
